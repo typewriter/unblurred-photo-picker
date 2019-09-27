@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'yaml'
+require 'fileutils'
 
 class Photo
   attr_accessor :filename
@@ -26,7 +27,96 @@ class Photo
   end
 end
 
-directory = ARGV[0]
+
+def inspector(directory)
+  puts <<STYLE
+<style type="text/css">
+table { border: 1px solid black; }
+td { text-align: right; }
+</style>
+STYLE
+
+  puts "<TABLE>"
+  puts "<TR><TH>写真</TH><TH>類似度</TH><TH>Kurtosis</TH><TH>SD</TH><TH>Skewness</TH><TH>Entropy</TH></TR>"
+
+  photos = []
+  Dir::glob(File.join(directory, '*.jpg'), File::FNM_CASEFOLD).sort.each { |filename|
+    photos << Photo.new(filename)
+    puts "<TR>"
+    puts "<TD><IMG src=\"#{filename}\" width=320></TD>"
+    puts "<TD>#{photos.last.calc_similarity(photos[-2]) if photos.size >= 2}</TD>"
+    puts "<TD>#{sprintf("%.2f", photos.last.kurtosis)}</TD>"
+    puts "<TD>#{sprintf("%.2f", photos.last.standard_deviation)}</TD>"
+    puts "<TD>#{sprintf("%.2f", photos.last.skewness)}</TD>"
+    puts "<TD>#{sprintf("%.2f", photos.last.entropy)}</TD>"
+    puts "</TR>"
+    STDOUT.flush
+    STDERR.puts "#{filename}"
+  }
+
+  puts "</TABLE>"
+end
+
+def select(photos, directory)
+  max_sd = photos.map { |e| e.standard_deviation }.max
+  duplicate_photos = photos.select { |e| e.standard_deviation != max_sd }
+
+  duplicate_photos.each { |e|
+    STDERR.puts "重複: #{File.basename(e.filename)}"
+    files = Dir::glob("#{File.dirname(e.filename)}#{File::SEPARATOR}#{File.basename(e.filename, '.*')}.*")
+    files.each { |file|
+      FileUtils.mv(file, directory)
+    }
+  }
+end
+
+def selector(directory)
+  duplicates_to = File.join(directory, 'duplicates')
+  Dir::mkdir(duplicates_to) if !Dir.exist?(duplicates_to)
+
+  STDERR.puts "重複画像は#{duplicates_to}に移動します．"
+
+  photos = []
+  files = Dir::glob(File.join(directory, '*.jpg'), File::FNM_CASEFOLD).sort
+  files.each_with_index { |filename, i|
+    STDERR.puts "#{i+1}/#{files.size} (#{sprintf('%.1f', (i+1) / files.size.to_f * 100)}%)"
+
+    photo = Photo.new(filename)
+
+    if photos.size == 0 || photos.last.calc_similarity(photo) < 10
+      photos << photo
+      next
+    end
+
+    select(photos, duplicates_to)
+    photos = [photo]
+  }
+
+  select(photos, duplicates_to)
+end
+
+def usage
+  STDERR.puts 'Usage: ./photo.rb mode directory'
+  STDERR.puts
+  STDERR.puts '  mode:      mode (inspector/selector)'
+  STDERR.puts '  directory: directory'
+end
+
+if ARGV.size < 2
+  usage
+  exit
+end
+
+mode = ARGV[0]
+directory = ARGV[1]
+
+if mode == "selector"
+  selector(directory)
+elsif mode == "inspector"
+  inspector(directory)
+else
+  usage
+end
 
 # photos = []
 # STDERR.puts "processing #{directory}"
@@ -36,29 +126,3 @@ directory = ARGV[0]
 #   STDERR.puts "  #{photos.last.calc_similarity(photos[-2])}" if photos.size >= 2
 # }
 
-puts <<STYLE
-<style type="text/css">
-table { border: 1px solid black; }
-td { text-align: right; }
-</style>
-STYLE
-
-puts "<TABLE>"
-puts "<TR><TH>写真</TH><TH>類似度</TH><TH>Kurtosis</TH><TH>SD</TH><TH>Skewness</TH><TH>Entropy</TH></TR>"
-
-photos = []
-Dir::glob(File.join(directory, '*.jpg'), File::FNM_CASEFOLD).sort.each { |filename|
-  photos << Photo.new(filename)
-  puts "<TR>"
-  puts "<TD><IMG src=\"#{filename}\" width=320></TD>"
-  puts "<TD>#{photos.last.calc_similarity(photos[-2]) if photos.size >= 2}</TD>"
-  puts "<TD>#{sprintf("%.2f", photos.last.kurtosis)}</TD>"
-  puts "<TD>#{sprintf("%.2f", photos.last.standard_deviation)}</TD>"
-  puts "<TD>#{sprintf("%.2f", photos.last.skewness)}</TD>"
-  puts "<TD>#{sprintf("%.2f", photos.last.entropy)}</TD>"
-  puts "</TR>"
-  STDOUT.flush
-  STDERR.puts "#{filename}"
-}
-
-puts "</TABLE>"
