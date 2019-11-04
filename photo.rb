@@ -2,11 +2,11 @@
 
 require 'yaml'
 require 'fileutils'
+require 'tmpdir'
 
 class Photo
   attr_accessor :filename
   attr_accessor :kurtosis
-  attr_accessor :standard_deviation
   attr_accessor :skewness
   attr_accessor :entropy
 
@@ -16,9 +16,21 @@ class Photo
     result_hash = YAML.load(result)
 
     @kurtosis = result_hash['kurtosis'].to_f
-    @standard_deviation = result_hash['standard_deviation'].to_f
+    # @standard_deviation = result_hash['standard_deviation'].to_f
     @skewness = result_hash['skewness'].to_f
     @entropy = result_hash['entropy'].to_f
+  end
+
+  def standard_deviation
+    return @standard_deviation if @standard_deviation
+
+    Dir.mktmpdir("unblurred") { |dir|
+      `convert "#{filename}" -canny 0x1+10%+30% "#{dir}/edge.png"`
+      result = `identify -format "{ \"kurtosis\": %[kurtosis], \"standard_deviation\": %[standard-deviation], \"skewness\": %[skewness], \"entropy\": %[entropy] }" "#{dir}/edge.png"`
+      result_hash = YAML.load(result)
+      @standard_deviation = result_hash['standard_deviation'].to_f
+    }
+    @standard_deviation
   end
 
   def calc_similarity(photo)
