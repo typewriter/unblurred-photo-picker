@@ -9,16 +9,20 @@ class Photo
   attr_accessor :kurtosis
   attr_accessor :skewness
   attr_accessor :entropy
+  attr_accessor :f
 
   def initialize(filename)
     @filename = filename
-    result = `identify -format "{ \"kurtosis\": %[kurtosis], \"standard_deviation\": %[standard-deviation], \"skewness\": %[skewness], \"entropy\": %[entropy] }" "#{filename}"`
+    result = `identify -format "{ \"kurtosis\": %[kurtosis], \"standard_deviation\": %[standard-deviation], \"skewness\": %[skewness], \"entropy\": %[entropy], \"f\": \"%[EXIF:FNumber]\" }" "#{filename}"`
     result_hash = YAML.load(result)
 
     @kurtosis = result_hash['kurtosis'].to_f
     # @standard_deviation = result_hash['standard_deviation'].to_f
     @skewness = result_hash['skewness'].to_f
     @entropy = result_hash['entropy'].to_f
+    @f = result_hash['f'].to_f
+
+    STDERR.puts "#{File.basename(filename)}: k#{@kurtosis} s#{@skewness} e#{@entropy} f#{@f}"
   end
 
   def standard_deviation
@@ -95,7 +99,7 @@ def selector(directory)
 
     photo = Photo.new(filename)
 
-    if photos.size == 0 || photos.last.calc_similarity(photo) < 10
+    if photos.size == 0 || (photos.last.f == photo.f && photos.last.calc_similarity(photo) < 10)
       photos << photo
       next
     end
